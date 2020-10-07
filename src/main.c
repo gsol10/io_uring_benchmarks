@@ -103,11 +103,17 @@ int queue_sendmsg(int fd, struct io_uring *ring, struct msghdr *msg) {
 	return 0;
 }
 
-static void queue_recvmsg(int fd, struct io_uring *ring) {
+static void queue_recvmsg(int fd, struct io_uring *ring, struct msghdr *msg) {
 	struct io_uring_sqe *sqe;
 	sqe = io_uring_get_sqe(ring);
-	printf("Sqe is %p\n", sqe);
+	//printf("Sqe is %p\n", sqe);
 
+	io_uring_prep_recvmsg(sqe, fd, msg, 0);
+	io_uring_sqe_set_data(sqe, msg);
+	//printf("Sent %d sqes\n", io_uring_submit(ring));
+}
+
+struct msghdr *alloc_msg() {
 	struct msghdr *msg = malloc(sizeof(struct msghdr));
 	struct sockaddr *s_addr = malloc(sizeof(struct sockaddr));
 	struct iovec *data = malloc(sizeof(struct iovec) + RECV_BUF_SIZE);
@@ -120,12 +126,7 @@ static void queue_recvmsg(int fd, struct io_uring *ring) {
 	msg->msg_iov = data;
 	msg->msg_iovlen = 1;
 
-	printf("Data is at %p\n", data);
-
-	//io_uring_prep_recv(sqe, fd, data, RECV_BUF_SIZE - 1, 0);
-	io_uring_prep_recvmsg(sqe, fd, msg, 0);
-	io_uring_sqe_set_data(sqe, msg);
-	printf("Sent %d sqes\n", io_uring_submit(ring));
+	return msg;
 }
 
 int tests_io_uring(int fd) {
@@ -133,22 +134,27 @@ int tests_io_uring(int fd) {
 	if (setup_context(64, &ring))
 		return 1;
 
-	queue_recvmsg(fd, &ring);
+	struct msghdr *msg = alloc_msg();
+	queue_recvmsg(fd, &ring, msg);
 	//queue_read(fd, &ring);
-	struct io_uring_cqe *cqe;
-	int ret = io_uring_wait_cqe(&ring, &cqe);
-	if (ret == 0) {
-		printf("It worked !\n");
-		struct msghdr *msg = io_uring_cqe_get_data(cqe);
-		printf("Data is at %p, res is %d\n", msg, (cqe->res));
+	while (1) {
+		struct io_uring_cqe *cqe;
+		int ret = io_uring_wait_cqe(&ring, &cqe);
+		if (ret == 0) {
+			//printf("It worked !\n");
+			struct msghdr *msg = io_uring_cqe_get_data(cqe);
+			//printf("Data is at %p, res is %d\n", msg, (cqe->res));
 
-		msg->msg_iov->iov_len = cqe->res;
-		
-		//data[10] = '\x00';
-		printf("Data = %s\n", (char *) msg->msg_iov->iov_base);
+			msg->msg_iov->iov_len = cqe->res;
+			
+			//data[10] = '\x00';
+			//printf("Data = %s\n", (char *) msg->msg_iov->iov_base);
 
-		queue_sendmsg(fd, &ring, msg);
-		io_uring_wait_cqe(&ring, &cqe);
+			queue_sendmsg(fd, &ring, msg);
+			io_uring_wait_cqe(&ring, &cqe);
+			msg->msg_iov->iov_len = RECV_BUF_SIZE;
+			queue_recvmsg(fd, &ring, msg);
+		}
 	}
 
 	io_uring_queue_exit(&ring);
