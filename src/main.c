@@ -110,7 +110,8 @@ static void queue_recvmsg(int fd, struct io_uring *ring, struct msghdr *msg) {
 
 	io_uring_prep_recvmsg(sqe, fd, msg, 0);
 	io_uring_sqe_set_data(sqe, msg);
-	//printf("Sent %d sqes\n", io_uring_submit(ring));
+	int n = io_uring_submit(ring);
+	//printf("Sent %d sqes\n", n);
 }
 
 struct msghdr *alloc_msg() {
@@ -141,7 +142,7 @@ int tests_io_uring(int fd) {
 		struct io_uring_cqe *cqe;
 		int ret = io_uring_wait_cqe(&ring, &cqe);
 		if (ret == 0) {
-			//printf("It worked !\n");
+			printf("It worked !\n");
 			struct msghdr *msg = io_uring_cqe_get_data(cqe);
 			//printf("Data is at %p, res is %d\n", msg, (cqe->res));
 
