@@ -14,6 +14,13 @@
 
 #define RECV_BUF_SIZE 4096
 
+//https://stackoverflow.com/a/1941331
+#ifdef DEBUG
+#define DEBUG_PRINT(fmt, args...) printf(fmt, ##args)
+#else
+#define DEBUG_PRINT(fmt, args...)
+#endif
+
 //Returns the file descriptor of the socket
 int setup() {
 	int fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -106,12 +113,12 @@ int queue_sendmsg(int fd, struct io_uring *ring, struct msghdr *msg) {
 static void queue_recvmsg(int fd, struct io_uring *ring, struct msghdr *msg) {
 	struct io_uring_sqe *sqe;
 	sqe = io_uring_get_sqe(ring);
-	//printf("Sqe is %p\n", sqe);
+	DEBUG_PRINT("Sqe is %p\n", sqe);
 
 	io_uring_prep_recvmsg(sqe, fd, msg, 0);
 	io_uring_sqe_set_data(sqe, msg);
 	int n = io_uring_submit(ring);
-	//printf("Sent %d sqes\n", n);
+	DEBUG_PRINT("Sent %d sqes\n", n);
 }
 
 struct msghdr *alloc_msg() {
@@ -142,14 +149,14 @@ int tests_io_uring(int fd) {
 		struct io_uring_cqe *cqe;
 		int ret = io_uring_wait_cqe(&ring, &cqe);
 		if (ret == 0) {
-			printf("It worked !\n");
+			DEBUG_PRINT("It worked !\n");
 			struct msghdr *msg = io_uring_cqe_get_data(cqe);
-			//printf("Data is at %p, res is %d\n", msg, (cqe->res));
+			DEBUG_PRINT("Data is at %p, res is %d\n", msg, (cqe->res));
 
 			msg->msg_iov->iov_len = cqe->res;
 			
 			//data[10] = '\x00';
-			//printf("Data = %s\n", (char *) msg->msg_iov->iov_base);
+			DEBUG_PRINT("Data = %s\n", (char *) msg->msg_iov->iov_base);
 
 			queue_sendmsg(fd, &ring, msg);
 			io_uring_wait_cqe(&ring, &cqe);
@@ -176,7 +183,7 @@ int main() {
 
 	// char buf[RECV_BUF_SIZE];
 	// int r = recv(fd, buf, RECV_BUF_SIZE - 1, 0);
-	// printf("Received : %d\n", r);
+	// DEBUG_PRINT("Received : %d\n", r);
 
 	// printf("Listening on socket. Receiving with vanilla recvfrom.\n");
 	// char buf[RECV_BUF_SIZE];
