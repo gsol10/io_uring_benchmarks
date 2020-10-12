@@ -12,7 +12,7 @@
 #include <strings.h>
 #include <unistd.h>
 
-#define RECV_BUF_SIZE 4096
+#define RECV_BUF_SIZE 1024
 
 //https://stackoverflow.com/a/1941331
 #ifdef DEBUG
@@ -121,29 +121,53 @@ static void queue_recvmsg(int fd, struct io_uring *ring, struct msghdr *msg) {
 	DEBUG_PRINT("Sent %d sqes\n", n);
 }
 
-struct msghdr *alloc_msg() {
+struct msghdr *alloc_msg(struct iovec *data, unsigned int iovec_len) {
 	struct msghdr *msg = malloc(sizeof(struct msghdr));
 	struct sockaddr *s_addr = malloc(sizeof(struct sockaddr));
-	struct iovec *data = malloc(sizeof(struct iovec) + RECV_BUF_SIZE);
+	// struct iovec *data = malloc(sizeof(struct iovec) + RECV_BUF_SIZE * iovec_len);
 
-	data->iov_base = data + 1;
-	data->iov_len = RECV_BUF_SIZE;
+	// data->iov_base = data + 1;
+	// data->iov_len = RECV_BUF_SIZE;
 
 	msg->msg_name = s_addr;
 	msg->msg_namelen = sizeof(s_addr);
 	msg->msg_iov = data;
-	msg->msg_iovlen = 1;
+	msg->msg_iovlen = iovec_len;
 
 	return msg;
 }
 
+int  alloc_iovec(struct iovec *iovec) {
+	char *data = malloc(RECV_BUF_SIZE);
+
+	iovec->iov_base = data;
+	iovec->iov_len = RECV_BUF_SIZE;
+}
+
 int tests_io_uring(int fd) {
 	struct io_uring ring;
-	if (setup_context(64, &ring))
+	unsigned int iovec_len = 1;
+	unsigned int ring_size = 16;
+	unsigned int total_iovecs = ring_size * iovec_len;
+
+	struct msghdr *msgs[ring_size];
+	struct iovec iovecs[total_iovecs];
+
+
+	if (setup_context(ring_size, &ring))
 		return 1;
 
-	struct msghdr *msg = alloc_msg();
-	queue_recvmsg(fd, &ring, msg);
+	for (int i = 0; i < total_iovecs; i++) {
+		alloc_iovec(&iovecs[i]);
+	}
+
+	for (int i = 0; i < ring_size; i++) {
+		msgs[i] = alloc_msg(&iovecs[i * iovec_len], iovec_len);
+	}
+
+	io_uring_register_buffers(&ring, iovecs, total_iovecs);
+
+	queue_recvmsg(fd, &ring, msgs[0]);
 	//queue_read(fd, &ring);
 	while (1) {
 		struct io_uring_cqe *cqe;
