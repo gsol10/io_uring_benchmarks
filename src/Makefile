@@ -5,3 +5,6 @@ echo: main.c
 
 debug:main.c
 	gcc main.c -g -DDEBUG -I$(LIBURING_PATH)/include -L$(LIBURING_PATH)/lib -luring -o echo
+
+clean:
+	rm echo
