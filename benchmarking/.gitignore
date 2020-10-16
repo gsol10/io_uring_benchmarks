@@ -1,0 +1,6 @@
+# Benchmark outputs
+*.log
+results/
+
+# Configuration
+config
