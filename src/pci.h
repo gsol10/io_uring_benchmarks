@@ -1,0 +1,1 @@
+int get_ifindex_of_pic(char *pci);

@@ -1,12 +1,16 @@
 #include "stdio.h"
 //#include <linux/io_uring.h>
 #include "liburing.h"
+#include "pci.h"
 #include <stdlib.h>
 
 
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
+#include <linux/if_ether.h>
+#include <net/ethernet.h>
+#include <linux/if_packet.h>
 
 #include <string.h>
 #include <strings.h>
@@ -32,6 +36,28 @@ int setup() {
 	laddr.sin_family    = AF_INET;
     laddr.sin_addr.s_addr = INADDR_ANY;
     laddr.sin_port = htons(10000);
+      
+    // Bind the socket with the server address
+	int r = 0;
+    if (r = bind(fd, (const struct sockaddr *)&laddr, sizeof(laddr)) < 0) {
+		char *error = strerror(r);
+        printf("Error binding socket : %s\n", error); 
+        return -1;
+    }
+
+	return fd;
+}
+
+int setup_packet(int ifindex) {
+	int fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP));
+	
+	struct sockaddr_ll laddr;
+
+	bzero(&laddr, sizeof(struct sockaddr_in));
+
+	laddr.sll_family    = AF_PACKET;
+    laddr.sll_protocol = htons(ETH_P_IP);
+    laddr.sll_ifindex =  ifindex;
       
     // Bind the socket with the server address
 	int r = 0;
@@ -169,17 +195,39 @@ int tests_io_uring(int fd) {
 	
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+	if (argc != 2) {
+		printf("Correct use : echo <pci_addr>\n");
+		return -1;
+	}
+
+
 	printf("Socket/io_uring test\n\n");
 	// struct io_uring_params params;
 	// io_uring_setup(32 , &params);
+
+	int n = get_ifindex_of_pic(argv[1]);
+	if (n == -1) {
+		printf("Network interface corresponding to PCI addr %s not found\n", argv[1]);
+		return -1;
+	}
+	printf("Binding to interface %d correponding to PCI %s\n", n, argv[1]);
 	printf("Setting up socket\n");
-	
-	int fd = setup();
 
-	printf("Starting test\n");
+	int fd = setup_packet(n);
 
-	tests_io_uring(fd);
+	char buf[RECV_BUF_SIZE];
+	int r = read(fd, buf, RECV_BUF_SIZE - 1);
+	printf("Received : %d\n", r);
+	for (int i = 0; i < 6; i++) {
+		printf("%hhx", buf[i]);
+	}
+
+	// int fd = setup();
+
+	// printf("Starting test\n");
+
+	// tests_io_uring(fd);
 
 	// char buf[RECV_BUF_SIZE];
 	// int r = recv(fd, buf, RECV_BUF_SIZE - 1, 0);
