@@ -16,7 +16,7 @@
 #include <strings.h>
 #include <unistd.h>
 
-#define RECV_BUF_SIZE 4096
+#define RECV_BUF_SIZE 2048
 
 //https://stackoverflow.com/a/1941331
 #ifdef DEBUG
@@ -83,42 +83,10 @@ static int setup_context(unsigned entries, struct io_uring *ring)
 	return 0;
 }
 
-struct io_data {
+struct msg_sent {
 	int read;
-	off_t first_offset, offset;
-	size_t first_len;
-	struct iovec iov;
+	int ind;
 };
-
-static int queue_read(int fd, struct io_uring *ring)
-{
-	int offset = 0;
-	int size = RECV_BUF_SIZE;
-	struct io_uring_sqe *sqe;
-	struct io_data *data;
-
-	data = malloc(RECV_BUF_SIZE + sizeof(*data));
-	if (!data)
-		return 1;
-
-	sqe = io_uring_get_sqe(ring);
-	if (!sqe) {
-		free(data);
-		return 1;
-	}
-
-	data->read = 1;
-	data->offset = data->first_offset = offset;
-
-	data->iov.iov_base = data + 1;
-	data->iov.iov_len = size;
-	data->first_len = size;
-
-	io_uring_prep_readv(sqe, fd, &data->iov, 1, offset);
-	io_uring_sqe_set_data(sqe, data);
-	io_uring_submit(ring);
-	return 0;
-}
 
 int queue_sendmsg(int fd, struct io_uring *ring, struct msghdr *msg) {
 	int offset = 0;
@@ -195,6 +163,66 @@ int tests_io_uring(int fd) {
 	
 }
 
+int echo_io_uring(int fd) {
+	struct io_uring ring;
+	int req_size = 64;
+
+	if (setup_context(req_size, &ring))
+		return 1;
+
+	struct iovec iov[req_size];
+	struct msg_sent info[req_size];
+	for (int i = 0; i < req_size; i++) {
+		iov[i].iov_base = malloc(RECV_BUF_SIZE);
+		iov[i].iov_len = RECV_BUF_SIZE;
+	}
+
+	io_uring_register_buffers(&ring, iov, req_size);
+
+	struct io_uring_sqe *sqe;
+
+	sqe = io_uring_get_sqe(&ring);
+	int32_t ind= 0;
+	io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+	info[ind].ind = ind;
+	info[ind].read = 1;
+	io_uring_sqe_set_data(sqe, &info[ind]);
+
+	io_uring_submit(&ring);
+	printf("Reading\n");
+	//queue_read(fd, &ring);
+	while (1) {
+		struct io_uring_cqe *cqe;
+		//int ret = io_uring_wait_cqe(&ring, &cqe);
+		int ret = io_uring_peek_cqe(&ring, &cqe);
+		DEBUG_PRINT("Read ret is %d\n", ret);
+		if (ret > 0) {
+			DEBUG_PRINT("It worked !\n");
+			struct msg_sent *inf = (struct msg_sent *) io_uring_cqe_get_data(cqe);
+			DEBUG_PRINT("Buffer index is %d, read is %d, res is %d\n", inf->ind, inf->read, (cqe->res));
+			ind = inf->ind;
+			if (inf->read == 1) {
+				io_uring_cqe_seen(&ring, cqe);
+				sqe = io_uring_get_sqe(&ring);
+				io_uring_prep_write_fixed(sqe, fd, iov[ind].iov_base, ret, 0, ind);
+				inf->read = 0;
+				io_uring_sqe_set_data(sqe, &info[ind]);
+				io_uring_submit(&ring);
+			} else {
+				io_uring_cqe_seen(&ring, cqe);
+				sqe = io_uring_get_sqe(&ring);
+				io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+				inf->read = 1;
+				io_uring_sqe_set_data(sqe, &info[ind]);
+				io_uring_submit(&ring);
+			}
+		}
+	}
+
+	io_uring_queue_exit(&ring);
+	
+}
+
 int main(int argc, char *argv[]) {
 	if (argc != 2) {
 		printf("Correct use : echo <pci_addr>\n");
@@ -216,12 +244,14 @@ int main(int argc, char *argv[]) {
 
 	int fd = setup_packet(n);
 
-	char buf[RECV_BUF_SIZE];
-	int r = read(fd, buf, RECV_BUF_SIZE - 1);
-	printf("Received : %d\n", r);
-	for (int i = 0; i < 6; i++) {
-		printf("%hhx", buf[i]);
-	}
+	echo_io_uring(fd);
+
+	// char buf[RECV_BUF_SIZE];
+	// int r = read(fd, buf, RECV_BUF_SIZE - 1);
+	// printf("Received : %d\n", r);
+	// for (int i = 0; i < 6; i++) {
+	// 	printf("%hhx", buf[i]);
+	// }
 
 	// int fd = setup();
 
