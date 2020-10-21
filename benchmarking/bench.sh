@@ -47,12 +47,17 @@ cleanup
 # Delete any hugepages in case some program left them around
 sudo rm -f "$(grep hugetlbfs /proc/mounts  | awk '{print $2}')"/*
 
-# Initialize DPDK if needed
+# Initialize DPDK or Linux if needed
 make -C "$NF_DIR" -f "$BENCH_MAKEFILE_NAME" -q is-dpdk >/dev/null 2>&1
-if [ $? -eq 2 ]; then
-  ./unbind-devices.sh $DUT_DEVS
-else
+if [ $? -ne 2 ]; then
   ./bind-devices-to-uio.sh $DUT_DEVS
+else
+  make -C "$NF_DIR" -f "$BENCH_MAKEFILE_NAME" -q is-linux >/dev/null 2>&1
+  if [ $? -ne 2 ]; then
+    ./bind-devices-to-linux.sh $DUT_DEVS
+  else
+    ./unbind-devices.sh $DUT_DEVS
+  fi
 fi
 
 git submodule update --init --recursive

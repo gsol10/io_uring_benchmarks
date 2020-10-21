@@ -19,6 +19,7 @@ The second machine is the "tester" machine, which runs the MoonGen packet genera
   - `run` to run the NF, with the PCI addresses of the network cards to use passed as `$(TN_ARGS)`
   - `print-nf-name` to print the name of the NF process, e.g. `@echo my-nf`
   - If your NF is based on DPDK, create an empty target `is-dpdk`
+  - If your NF is based on Linux, create an empty target `is-linux`
   - If your NF needs something done after it starts, such as sleeping for a while because it is slow to start, put this in a target `init`
 
 - Double-check your NF's configuration:
