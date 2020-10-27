@@ -71,7 +71,7 @@ char ** get_devices(int *nret) {
     char ifname[20];
     size_t len;
     int read;
-    char **ifnames;
+    char **ifnames = NULL;
     int nb_names;
     unsigned long int r_bytes, t_bytes, r_packets, t_packets;
 
