@@ -86,6 +86,7 @@ static int setup_context(unsigned entries, struct io_uring *ring)
 struct msg_sent {
 	int read;
 	int ind;
+	int interface; //1 or 2 depending on the fd
 };
 
 int queue_sendmsg(int fd, struct io_uring *ring, struct msghdr *msg) {
@@ -163,7 +164,7 @@ int tests_io_uring(int fd) {
 	
 }
 
-int echo_io_uring(int fd) {
+int echo_io_uring(int fd1, int fd2) {
 	struct io_uring ring;
 	int req_size = 64;
 
@@ -179,14 +180,23 @@ int echo_io_uring(int fd) {
 
 	io_uring_register_buffers(&ring, iov, req_size);
 
-	struct io_uring_sqe *sqe;
+	struct io_uring_sqe *sqe1, *sqe2;
 
-	sqe = io_uring_get_sqe(&ring);
-	int32_t ind= 0;
-	io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+	sqe1 = io_uring_get_sqe(&ring);
+	int32_t ind = 0;
+	io_uring_prep_read_fixed(sqe1, fd1, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
 	info[ind].ind = ind;
 	info[ind].read = 1;
-	io_uring_sqe_set_data(sqe, &info[ind]);
+	info[ind].interface = 1;
+	io_uring_sqe_set_data(sqe1, &info[ind]);
+
+	sqe2 = io_uring_get_sqe(&ring);
+	ind = 1;
+	io_uring_prep_read_fixed(sqe2, fd1, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+	info[ind].ind = ind;
+	info[ind].read = 1;
+	info[ind].interface = 1;
+	io_uring_sqe_set_data(sqe2, &info[ind]);
 
 	io_uring_submit(&ring);
 	printf("Reading\n");
@@ -201,19 +211,21 @@ int echo_io_uring(int fd) {
 			struct msg_sent *inf = (struct msg_sent *) io_uring_cqe_get_data(cqe);
 			DEBUG_PRINT("Buffer index is %d, read is %d, res is %d\n", inf->ind, inf->read, (cqe->res));
 			ind = inf->ind;
+			int fd = inf->interface == 1 ? fd1 : fd2;
+			inf->interface = 3 - inf->interface;
 			if (inf->read == 1) {
 				io_uring_cqe_seen(&ring, cqe);
-				sqe = io_uring_get_sqe(&ring);
-				io_uring_prep_write_fixed(sqe, fd, iov[ind].iov_base, ret, 0, ind);
+				sqe1 = io_uring_get_sqe(&ring);
+				io_uring_prep_write_fixed(sqe1, fd, iov[ind].iov_base, ret, 0, ind);
 				inf->read = 0;
-				io_uring_sqe_set_data(sqe, &info[ind]);
+				io_uring_sqe_set_data(sqe1, &info[ind]);
 				io_uring_submit(&ring);
 			} else {
 				io_uring_cqe_seen(&ring, cqe);
-				sqe = io_uring_get_sqe(&ring);
-				io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+				sqe1 = io_uring_get_sqe(&ring);
+				io_uring_prep_read_fixed(sqe1, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
 				inf->read = 1;
-				io_uring_sqe_set_data(sqe, &info[ind]);
+				io_uring_sqe_set_data(sqe1, &info[ind]);
 				io_uring_submit(&ring);
 			}
 		}
@@ -224,8 +236,8 @@ int echo_io_uring(int fd) {
 }
 
 int main(int argc, char *argv[]) {
-	if (argc != 2) {
-		printf("Correct use : echo <pci_addr>\n");
+	if (argc != 3) {
+		printf("Correct use : echo <pci_addr1> <pci_addr2>\n");
 		return -1;
 	}
 
@@ -234,17 +246,23 @@ int main(int argc, char *argv[]) {
 	// struct io_uring_params params;
 	// io_uring_setup(32 , &params);
 
-	int n = get_ifindex_of_pic(argv[1]);
-	if (n == -1) {
+	int n1 = get_ifindex_of_pic(argv[1]);
+	if (n1 == -1) {
 		printf("Network interface corresponding to PCI addr %s not found\n", argv[1]);
 		return -1;
 	}
-	printf("Binding to interface %d correponding to PCI %s\n", n, argv[1]);
+	int n2 = get_ifindex_of_pic(argv[2]);
+	if (n2 == -1) {
+		printf("Network interface corresponding to PCI addr %s not found\n", argv[2]);
+		return -1;
+	}
+	printf("Binding to interfaces %d, %d correponding to PCIs %s and %s\n", n1, n2, argv[1], argv[2]);
 	printf("Setting up socket\n");
 
-	int fd = setup_packet(n);
+	int fd1 = setup_packet(n1);
+	int fd2 = setup_packet(n2);
 
-	echo_io_uring(fd);
+	echo_io_uring(fd1, fd2);
 
 	// char buf[RECV_BUF_SIZE];
 	// int r = read(fd, buf, RECV_BUF_SIZE - 1);
@@ -273,7 +291,8 @@ int main(int argc, char *argv[]) {
 
 	// 	addrlen = sizeof(struct sockaddr);
 	// }
-	close(fd);
+	close(fd1);
+	close(fd2);
 
 	return 0;
 }
