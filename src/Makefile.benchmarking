@@ -7,6 +7,6 @@ run:
 build: echo
 
 print-nf-name:
-	echo "Simple NF/IO_uring test"
+	echo "echo"
 
 is-linux: ;
