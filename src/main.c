@@ -180,23 +180,23 @@ int echo_io_uring(int fd1, int fd2) {
 
 	io_uring_register_buffers(&ring, iov, req_size);
 
-	struct io_uring_sqe *sqe1, *sqe2;
+	struct io_uring_sqe *sqe;
 
-	sqe1 = io_uring_get_sqe(&ring);
+	sqe = io_uring_get_sqe(&ring);
 	int32_t ind = 0;
-	io_uring_prep_read_fixed(sqe1, fd1, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+	io_uring_prep_read_fixed(sqe, fd1, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
 	info[ind].ind = ind;
 	info[ind].read = 1;
 	info[ind].interface = 1;
-	io_uring_sqe_set_data(sqe1, &info[ind]);
+	io_uring_sqe_set_data(sqe, &info[ind]);
 
-	sqe2 = io_uring_get_sqe(&ring);
+	sqe = io_uring_get_sqe(&ring);
 	ind = 1;
-	io_uring_prep_read_fixed(sqe2, fd2, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+	io_uring_prep_read_fixed(sqe, fd2, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
 	info[ind].ind = ind;
 	info[ind].read = 1;
 	info[ind].interface = 2;
-	io_uring_sqe_set_data(sqe2, &info[ind]);
+	io_uring_sqe_set_data(sqe, &info[ind]);
 
 	io_uring_submit(&ring);
 	printf("Reading\n");
@@ -215,17 +215,17 @@ int echo_io_uring(int fd1, int fd2) {
 			inf->interface = 3 - inf->interface;
 			if (inf->read == 1) {
 				io_uring_cqe_seen(&ring, cqe);
-				sqe1 = io_uring_get_sqe(&ring);
-				io_uring_prep_write_fixed(sqe1, fd, iov[ind].iov_base, cqe->res, 0, ind);
+				sqe = io_uring_get_sqe(&ring);
+				io_uring_prep_write_fixed(sqe, fd, iov[ind].iov_base, cqe->res, 0, ind);
 				inf->read = 0;
-				io_uring_sqe_set_data(sqe1, &info[ind]);
+				io_uring_sqe_set_data(sqe, &info[ind]);
 				io_uring_submit(&ring);
 			} else {
 				io_uring_cqe_seen(&ring, cqe);
-				sqe1 = io_uring_get_sqe(&ring);
-				io_uring_prep_read_fixed(sqe1, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+				sqe = io_uring_get_sqe(&ring);
+				io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
 				inf->read = 1;
-				io_uring_sqe_set_data(sqe1, &info[ind]);
+				io_uring_sqe_set_data(sqe, &info[ind]);
 				io_uring_submit(&ring);
 			}
 		}
