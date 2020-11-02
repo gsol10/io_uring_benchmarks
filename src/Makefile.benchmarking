@@ -9,4 +9,7 @@ build: echo
 print-nf-name:
 	echo "echo"
 
+init:
+	sleep 10
+
 is-linux: ;
