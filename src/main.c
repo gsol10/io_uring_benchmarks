@@ -216,7 +216,7 @@ int echo_io_uring(int fd1, int fd2) {
 			if (inf->read == 1) {
 				io_uring_cqe_seen(&ring, cqe);
 				sqe1 = io_uring_get_sqe(&ring);
-				io_uring_prep_write_fixed(sqe1, fd, iov[ind].iov_base, ret, 0, ind);
+				io_uring_prep_write_fixed(sqe1, fd, iov[ind].iov_base, cqe->res, 0, ind);
 				inf->read = 0;
 				io_uring_sqe_set_data(sqe1, &info[ind]);
 				io_uring_submit(&ring);
