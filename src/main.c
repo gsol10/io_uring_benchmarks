@@ -206,7 +206,7 @@ int echo_io_uring(int fd1, int fd2) {
 		//int ret = io_uring_wait_cqe(&ring, &cqe);
 		int ret = io_uring_peek_cqe(&ring, &cqe);
 		DEBUG_PRINT("Read ret is %d\n", ret);
-		if (ret > 0) {
+		if (ret == 0) {
 			DEBUG_PRINT("It worked !\n");
 			struct msg_sent *inf = (struct msg_sent *) io_uring_cqe_get_data(cqe);
 			DEBUG_PRINT("Buffer index is %d, read is %d, res is %d\n", inf->ind, inf->read, (cqe->res));
