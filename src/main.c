@@ -211,7 +211,7 @@ int echo_io_uring(int fd1, int fd2) {
 			struct msg_sent *inf = (struct msg_sent *) io_uring_cqe_get_data(cqe);
 			DEBUG_PRINT("Buffer index is %d, read is %d, res is %d\n", inf->ind, inf->read, (cqe->res));
 			ind = inf->ind;
-			int fd = inf->interface == 1 ? fd1 : fd2;
+			int fd = inf->interface == 1 ? fd2 : fd1; //Send on the other interface
 			inf->interface = 3 - inf->interface;
 			if (inf->read == 1) {
 				io_uring_cqe_seen(&ring, cqe);
