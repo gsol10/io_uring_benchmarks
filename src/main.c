@@ -192,7 +192,7 @@ int echo_io_uring(int fd1, int fd2) {
 
 	sqe2 = io_uring_get_sqe(&ring);
 	ind = 1;
-	io_uring_prep_read_fixed(sqe2, fd1, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+	io_uring_prep_read_fixed(sqe2, fd2, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
 	info[ind].ind = ind;
 	info[ind].read = 1;
 	info[ind].interface = 1;
