@@ -178,7 +178,10 @@ int echo_io_uring(int fd1, int fd2) {
 		iov[i].iov_len = RECV_BUF_SIZE;
 	}
 
-	io_uring_register_buffers(&ring, iov, req_size);
+	if (io_uring_register_buffers(&ring, iov, req_size) < 0) {
+		printf("Error registering buffers\n");
+		return 0;
+	}
 
 	struct io_uring_sqe *sqe;
 
