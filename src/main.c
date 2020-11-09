@@ -189,10 +189,12 @@ int echo_io_uring(int fd1, int fd2) {
 	for (int i = 0; i < req_size; i++) {
 		sqe = io_uring_get_sqe(&ring);
 		int32_t ind = i;
-		io_uring_prep_read_fixed(sqe, fd1, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+		int interface = (i % 2) + 1;
+		int fd = interface == 1 ? fd1 : fd2;
+		io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
 		info[ind].ind = ind;
 		info[ind].read = 1;
-		info[ind].interface = (i % 2) + 1;
+		info[ind].interface = interface;
 		io_uring_sqe_set_data(sqe, &info[ind]);
 	}
 
