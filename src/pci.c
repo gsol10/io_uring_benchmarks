@@ -1,3 +1,8 @@
+/*
+This code was mostly adapted from lshw (https://github.com/lyonel/lshw)
+Licensed under GPL 2.0
+*/
+
 #include <stdint.h>
 #include <sys/types.h>
 #include <linux/if.h>
