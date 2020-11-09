@@ -201,13 +201,14 @@ int echo_io_uring(int fd1, int fd2) {
 	io_uring_submit(&ring);
 	printf("Reading\n");
 	//queue_read(fd, &ring);
-	struct io_uring_cqe *cqes = malloc(sizeof(struct io_uring_cqe) * req_size);
+	struct io_uring_cqe **cqes = malloc(sizeof(struct io_uring_cqe *) * req_size);
+	
 	while (1) {
-		int nb_req = io_uring_peek_batch_cqe(&ring, &cqes, req_size);
+		int nb_req = io_uring_peek_batch_cqe(&ring, cqes, req_size);
 
 		DEBUG_PRINT("CQE read is %d\n", ret);
 		for (int i = 0; i < nb_req; i++) {
-			struct io_uring_cqe *cqe = &cqes[i];
+			struct io_uring_cqe *cqe = cqes[i];
 			DEBUG_PRINT("It worked !\n");
 			struct msg_sent *inf = (struct msg_sent *) io_uring_cqe_get_data(cqe);
 			DEBUG_PRINT("Buffer index is %d, read is %d, res is %d\n", inf->ind, inf->read, (cqe->res));
