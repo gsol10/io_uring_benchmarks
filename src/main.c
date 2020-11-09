@@ -199,8 +199,8 @@ int echo_io_uring(int fd1, int fd2) {
 	io_uring_submit(&ring);
 	printf("Reading\n");
 	//queue_read(fd, &ring);
+	struct io_uring_cqe *cqes = malloc(sizeof(struct io_uring_cqe) * req_size);
 	while (1) {
-		struct io_uring_cqe cqes[req_size];
 		int nb_req = io_uring_peek_batch_cqe(&ring, &cqes, req_size);
 
 		DEBUG_PRINT("CQE read is %d\n", ret);
@@ -229,6 +229,7 @@ int echo_io_uring(int fd1, int fd2) {
 			}
 		}
 	}
+	free(cqes);
 
 	io_uring_queue_exit(&ring);
 	
