@@ -185,35 +185,31 @@ int echo_io_uring(int fd1, int fd2) {
 
 	struct io_uring_sqe *sqe;
 
-	sqe = io_uring_get_sqe(&ring);
-	int32_t ind = 0;
-	io_uring_prep_read_fixed(sqe, fd1, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
-	info[ind].ind = ind;
-	info[ind].read = 1;
-	info[ind].interface = 1;
-	io_uring_sqe_set_data(sqe, &info[ind]);
-
-	sqe = io_uring_get_sqe(&ring);
-	ind = 1;
-	io_uring_prep_read_fixed(sqe, fd2, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
-	info[ind].ind = ind;
-	info[ind].read = 1;
-	info[ind].interface = 2;
-	io_uring_sqe_set_data(sqe, &info[ind]);
+	//We fill the sqes with read requests for both interfaces
+	for (int i = 0; i < req_size; i++) {
+		sqe = io_uring_get_sqe(&ring);
+		int32_t ind = i;
+		io_uring_prep_read_fixed(sqe, fd1, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+		info[ind].ind = ind;
+		info[ind].read = 1;
+		info[ind].interface = (i % 2) + 1;
+		io_uring_sqe_set_data(sqe, &info[ind]);
+	}
 
 	io_uring_submit(&ring);
 	printf("Reading\n");
 	//queue_read(fd, &ring);
 	while (1) {
-		struct io_uring_cqe *cqe;
-		//int ret = io_uring_wait_cqe(&ring, &cqe);
-		int ret = io_uring_peek_cqe(&ring, &cqe);
-		DEBUG_PRINT("Read ret is %d\n", ret);
-		if (ret == 0) {
+		struct io_uring_cqe cqes[req_size];
+		int nb_req = io_uring_peek_batch_cqe(&ring, &cqes, req_size);
+
+		DEBUG_PRINT("CQE read is %d\n", ret);
+		for (int i = 0; i < nb_req; i++) {
+			struct io_uring_cqe *cqe = &cqes[i];
 			DEBUG_PRINT("It worked !\n");
 			struct msg_sent *inf = (struct msg_sent *) io_uring_cqe_get_data(cqe);
 			DEBUG_PRINT("Buffer index is %d, read is %d, res is %d\n", inf->ind, inf->read, (cqe->res));
-			ind = inf->ind;
+			int32_t ind = inf->ind;
 			int fd = inf->interface == 1 ? fd2 : fd1; //Send on the other interface
 			inf->interface = 3 - inf->interface;
 			if (inf->read == 1) {
