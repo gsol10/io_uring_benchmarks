@@ -87,8 +87,8 @@ int echo_io_uring(int fd1, int fd2) {
 
 	struct io_uring_sqe *sqe;
 
-	//We fill the sqes with read requests for both interfaces
-	for (int i = 0; i < req_size; i++) {
+	//We fill the half of the sqes with read requests for both interfaces
+	for (int i = 0; i < req_size/2; i++) {
 		sqe = io_uring_get_sqe(&ring);
 		int32_t ind = i;
 		int interface = (i % 2) + 1;
@@ -118,21 +118,19 @@ int echo_io_uring(int fd1, int fd2) {
 			int fd = inf->interface == 1 ? fd2 : fd1; //Send on the other interface
 			inf->interface = 3 - inf->interface;
 			if (inf->read == 1) {
-				io_uring_cqe_seen(&ring, cqe);
 				sqe = io_uring_get_sqe(&ring);
 				io_uring_prep_write_fixed(sqe, fd, iov[ind].iov_base, cqe->res, 0, ind);
 				inf->read = 0;
 				io_uring_sqe_set_data(sqe, &info[ind]);
-				io_uring_submit(&ring);
 			} else {
-				io_uring_cqe_seen(&ring, cqe);
 				sqe = io_uring_get_sqe(&ring);
 				io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
 				inf->read = 1;
 				io_uring_sqe_set_data(sqe, &info[ind]);
-				io_uring_submit(&ring);
 			}
 		}
+		io_uring_cq_advance(&ring, nb_req); //Equivalent to seen
+		io_uring_submit(&ring);
 	}
 	free(cqes);
 
