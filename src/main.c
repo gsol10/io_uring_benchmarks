@@ -27,7 +27,7 @@
 
 int setup_packet(int ifindex) {
 	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, htons(ETH_P_IP));
-	
+
 	struct sockaddr_ll laddr;
 
 	bzero(&laddr, sizeof(struct sockaddr_in));
@@ -35,7 +35,7 @@ int setup_packet(int ifindex) {
 	laddr.sll_family    = AF_PACKET;
     laddr.sll_protocol = htons(ETH_P_IP);
     laddr.sll_ifindex =  ifindex;
-      
+
     // Bind the socket with the server address
 	int r = 0;
     if (r = bind(fd, (const struct sockaddr *)&laddr, sizeof(laddr)) < 0) {
@@ -68,7 +68,7 @@ struct msg_sent {
 
 int echo_io_uring(int fd1, int fd2) {
 	struct io_uring ring;
-	int req_size = 64;
+	int req_size = 1024;
 
 	if (setup_context(req_size, &ring))
 		return 1;
@@ -80,11 +80,6 @@ int echo_io_uring(int fd1, int fd2) {
 		iov[i].iov_len = RECV_BUF_SIZE;
 	}
 
-	if (io_uring_register_buffers(&ring, iov, req_size) < 0) {
-		printf("Error registering buffers\n");
-		return 0;
-	}
-
 	struct io_uring_sqe *sqe;
 
 	//We fill the half of the sqes with read requests for both interfaces
@@ -93,7 +88,7 @@ int echo_io_uring(int fd1, int fd2) {
 		int32_t ind = i;
 		int interface = (i % 2) + 1;
 		int fd = interface == 1 ? fd1 : fd2;
-		io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+		io_uring_prep_read(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0);
 		info[ind].ind = ind;
 		info[ind].read = 1;
 		info[ind].interface = interface;
@@ -119,12 +114,12 @@ int echo_io_uring(int fd1, int fd2) {
 			inf->interface = 3 - inf->interface;
 			if (inf->read == 1) {
 				sqe = io_uring_get_sqe(&ring);
-				io_uring_prep_write_fixed(sqe, fd, iov[ind].iov_base, cqe->res, 0, ind);
+				io_uring_prep_write(sqe, fd, iov[ind].iov_base, cqe->res, 0);
 				inf->read = 0;
 				io_uring_sqe_set_data(sqe, &info[ind]);
 			} else {
 				sqe = io_uring_get_sqe(&ring);
-				io_uring_prep_read_fixed(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0, ind);
+				io_uring_prep_read(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0);
 				inf->read = 1;
 				io_uring_sqe_set_data(sqe, &info[ind]);
 			}
