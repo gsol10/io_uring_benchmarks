@@ -177,7 +177,7 @@ int echo_io_uring(int fd1, int fd2) {
 				sqe = io_uring_get_sqe(&ring);
 				sqe->flags = 0;
 				iov[ind].iov_len = RECV_BUF_SIZE;
-				io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
+				io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
 				info[ind].ind = ind;
 				info[ind].op_type = EVENT_READ;
 				info[ind].interface = interface;
