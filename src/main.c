@@ -129,10 +129,10 @@ int echo_io_uring(int fd1, int fd2) {
 		for (int i = 0; i < nb_req; i++) {
 			struct io_uring_cqe *cqe = cqes[i];
 			struct msg_sent *inf = (struct msg_sent *) io_uring_cqe_get_data(cqe);
-			int32_t interface = inf->interface;
+			int32_t interface = 1 - inf->interface; //Opposite interface
 			int ind = inf->ind;
 			int type = inf->op_type;
-			int fd = fds[1 - interface]; //Opposite fd
+			int fd = fds[interface]; //Opposite fd
 			int ret = cqe->res;
 
 			io_uring_cqe_seen(&ring, cqe);
