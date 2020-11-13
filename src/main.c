@@ -26,7 +26,7 @@
 #endif
 
 int setup_packet(int ifindex) {
-	int fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP));
+	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, htons(ETH_P_IP));
 	
 	struct sockaddr_ll laddr;
 
