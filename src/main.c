@@ -114,6 +114,7 @@ int echo_io_uring(int fd1, int fd2) {
 			inf->interface = 3 - inf->interface;
 			if (inf->read == 1) {
 				sqe = io_uring_get_sqe(&ring);
+				iov[ind].iov_len = cqe->res;
 				io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
 				inf->read = 0;
 				io_uring_sqe_set_data(sqe, &info[ind]);
