@@ -88,7 +88,7 @@ int echo_io_uring(int fd1, int fd2) {
 		int32_t ind = i;
 		int interface = (i % 2) + 1;
 		int fd = interface == 1 ? fd1 : fd2;
-		io_uring_prep_read(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0);
+		io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
 		info[ind].ind = ind;
 		info[ind].read = 1;
 		info[ind].interface = interface;
@@ -114,12 +114,13 @@ int echo_io_uring(int fd1, int fd2) {
 			inf->interface = 3 - inf->interface;
 			if (inf->read == 1) {
 				sqe = io_uring_get_sqe(&ring);
-				io_uring_prep_write(sqe, fd, iov[ind].iov_base, cqe->res, 0);
+				io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
 				inf->read = 0;
 				io_uring_sqe_set_data(sqe, &info[ind]);
 			} else {
 				sqe = io_uring_get_sqe(&ring);
-				io_uring_prep_read(sqe, fd, iov[ind].iov_base, RECV_BUF_SIZE, 0);
+				iov[ind].iov_len = RECV_BUF_SIZE; //We read max len again.
+				io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
 				inf->read = 1;
 				io_uring_sqe_set_data(sqe, &info[ind]);
 			}
