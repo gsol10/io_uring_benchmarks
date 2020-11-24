@@ -49,11 +49,11 @@ int setup_packet(int ifindex) {
 	return fd;
 }
 
-static int setup_context(unsigned entries, struct io_uring *ring)
+static int setup_context(unsigned entries, struct io_uring *ring, int flags)
 {
 	int ret;
 
-	ret = io_uring_queue_init(entries, ring, 0);
+	ret = io_uring_queue_init(entries, ring, flags);
 	if (ret < 0) {
 		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
 		return -1;
@@ -80,7 +80,12 @@ int echo_io_uring(int fd1, int fd2) {
 
 	int fds[2] = {fd1, fd2};
 
-	if (setup_context(req_size, &ring))
+	int flags = 0;
+#ifdef SQPOLL
+	flags |= IORING_SETUP_SQPOLL;
+#endif
+
+	if (setup_context(req_size, &ring, flags))
 		return 1;
 
 	struct iovec iov[req_size];
@@ -185,7 +190,7 @@ int echo_io_uring(int fd1, int fd2) {
 				break;
 			}
 		}
-		io_uring_submit(&ring);
+		io_uring_submit(&ring); //This call automatically deals with waking up the sq thread if needed.
 	}
 	free(cqes);
 
