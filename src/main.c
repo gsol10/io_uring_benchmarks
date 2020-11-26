@@ -74,6 +74,75 @@ struct msg_sent {
 	int interface; //1 or 2 depending on the fd
 };
 
+#ifndef FEAT_FAST_POLL //If no FAST_POLL (kernel side polling), need to poll manually by adding a poll operation before the actual read
+static inline int prepare_read(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface) {
+	int32_t ind = i;
+	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
+	io_uring_prep_poll_add(sqe, fd, POLLIN);
+	sqe->flags |= IOSQE_IO_LINK; //Link so that next submission is executed just after this one
+	info[ind].ind = ind;
+	info[ind].op_type = EVENT_POLL;
+	info[ind].interface = interface;
+	io_uring_sqe_set_data(sqe, &info[ind]);
+
+	ind = i + 1;
+	sqe = io_uring_get_sqe(ring);
+	sqe->flags = 0;
+	iov[ind].iov_len = RECV_BUF_SIZE;
+	io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
+	info[ind].ind = ind;
+	info[ind].op_type = EVENT_READ;
+	info[ind].interface = interface;
+	io_uring_sqe_set_data(sqe, &info[ind]);
+}
+
+static inline int prepare_write(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface, int len) {
+	int32_t ind = i;
+	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
+	io_uring_prep_poll_add(sqe, fd, POLLOUT); //Check when fd is ready to write
+	sqe->flags |= IOSQE_IO_LINK; //Link so that next submission is executed just after this one
+	info[ind].ind = ind;
+	info[ind].op_type = EVENT_POLL;
+	info[ind].interface = interface;
+	io_uring_sqe_set_data(sqe, &info[ind]);
+
+	ind+=1;
+	sqe = io_uring_get_sqe(ring);
+	sqe->flags = 0;
+	iov[ind].iov_len = len;
+	io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
+	info[ind].ind = ind;
+	info[ind].op_type = EVENT_WRITE;
+	info[ind].interface = interface;
+	io_uring_sqe_set_data(sqe, &info[ind]);
+}
+#else
+static inline int prepare_read(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface) {
+	int32_t ind = i;
+	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
+	sqe->flags = 0;
+	iov[ind].iov_len = RECV_BUF_SIZE;
+	io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
+	info[ind].ind = ind;
+	info[ind].op_type = EVENT_READ;
+	info[ind].interface = interface;
+	io_uring_sqe_set_data(sqe, &info[ind]);
+}
+
+static inline int prepare_write(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface, int len) {
+	int32_t ind = i;
+	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
+	sqe->flags = 0;
+	iov[ind].iov_len = len;
+	io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
+	info[ind].ind = ind;
+	info[ind].op_type = EVENT_WRITE;
+	info[ind].interface = interface;
+	io_uring_sqe_set_data(sqe, &info[ind]);
+}
+#endif
+
+
 int echo_io_uring(int fd1, int fd2) {
 	struct io_uring ring;
 	int req_size = 8;
@@ -81,7 +150,7 @@ int echo_io_uring(int fd1, int fd2) {
 	int fds[2] = {fd1, fd2};
 
 	int flags = 0;
-#ifdef SQPOLL
+#ifdef SQPOLL //Fairly straightforward thanks to the liburing helpers
 	flags |= IORING_SETUP_SQPOLL;
 #endif
 
@@ -102,24 +171,7 @@ int echo_io_uring(int fd1, int fd2) {
 		int interface = (i % 4)/2;
 		int fd = fds[interface];
 
-		int32_t ind = i;
-		sqe = io_uring_get_sqe(&ring);
-		io_uring_prep_poll_add(sqe, fd, POLLIN);
-		sqe->flags |= IOSQE_IO_LINK; //Link so that next submission is executed just after this one
-		info[ind].ind = ind;
-		info[ind].op_type = EVENT_POLL;
-		info[ind].interface = interface;
-		io_uring_sqe_set_data(sqe, &info[ind]);
-
-
-		ind = i + 1;
-		sqe = io_uring_get_sqe(&ring);
-		sqe->flags = 0;
-		io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
-		info[ind].ind = ind;
-		info[ind].op_type = EVENT_READ;
-		info[ind].interface = interface;
-		io_uring_sqe_set_data(sqe, &info[ind]);
+		prepare_read(&ring, info, iov, i, fd, interface); //TODO: for FEAT_FAST_POLL
 	}
 
 	io_uring_submit(&ring);
@@ -148,45 +200,10 @@ int echo_io_uring(int fd1, int fd2) {
 			case EVENT_POLL:
 				break;
 			case EVENT_READ:
-				ind -= 1; //We know the poll was already seen so the previous info is free
-				sqe = io_uring_get_sqe(&ring);
-				io_uring_prep_poll_add(sqe, fd, POLLOUT); //Check when fd is ready to write
-				sqe->flags |= IOSQE_IO_LINK; //Link so that next submission is executed just after this one
-				info[ind].ind = ind;
-				info[ind].op_type = EVENT_POLL;
-				info[ind].interface = interface;
-				io_uring_sqe_set_data(sqe, &info[ind]);
-
-				ind+=1;
-				sqe = io_uring_get_sqe(&ring);
-				sqe->flags = 0;
-				iov[ind].iov_len = ret;
-				io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
-				info[ind].ind = ind;
-				info[ind].op_type = EVENT_WRITE;
-				info[ind].interface = interface;
-				io_uring_sqe_set_data(sqe, &info[ind]);
-
+				prepare_write(&ring, info, iov, ind - 1, fd, interface, ret);
 				break;			
 			case EVENT_WRITE:
-				ind -= 1; //We know the poll was already seen so the previous info is free
-				sqe = io_uring_get_sqe(&ring);
-				io_uring_prep_poll_add(sqe, fd, POLLIN); //Check when fd is ready to read
-				sqe->flags |= IOSQE_IO_LINK; //Link so that next submission is executed just after this one
-				info[ind].ind = ind;
-				info[ind].op_type = EVENT_POLL;
-				info[ind].interface = interface;
-				io_uring_sqe_set_data(sqe, &info[ind]);
-
-				ind+=1;
-				sqe = io_uring_get_sqe(&ring);
-				sqe->flags = 0;
-				iov[ind].iov_len = RECV_BUF_SIZE;
-				io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
-				info[ind].ind = ind;
-				info[ind].op_type = EVENT_READ;
-				info[ind].interface = interface;
-				io_uring_sqe_set_data(sqe, &info[ind]);
+				prepare_read(&ring, info, iov, ind - 1, fd, interface);
 				break;
 			}
 		}
@@ -206,6 +223,15 @@ int main(int argc, char *argv[]) {
 
 
 	printf("Socket/io_uring test\n\n");
+
+#ifdef SQPOLL
+	printf("Compiled with SQPOLL\n");
+#endif
+
+#ifdef FEAT_FAST_POLL
+	printf("Compiled with FEAT_FAST_POLL\n");
+#endif
+
 	// struct io_uring_params params;
 	// io_uring_setup(32 , &params);
 
