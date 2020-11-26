@@ -1,6 +1,8 @@
 IO_URING networking benchmarks
 ===
 
+- Be **EXTRA** caution when running this on machines, io_uring is not always stable. Namely, it can cause some kernel hangs (ie with 5.4.0-53-generic which is LTS Ubuntu kernel to this date)
+
 ## Setup
 
 1. Set up liburing
@@ -17,4 +19,5 @@ IO_URING networking benchmarks
 
 ## Troubleshooting
 
-- Check kernel version
+- Check kernel version. 5.7 needed for IORING_FEAT_FAST_POLL.
+- Check interfaces are promiscuous (`ip link set dev <interface name> promisc on`)
