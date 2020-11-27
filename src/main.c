@@ -153,10 +153,6 @@ int echo_io_uring(int fd1, int fd2) {
 
 	int fds[2] = {fd1, fd2};
 
-	if (io_uring_register_files(&ring, fds, 2)) {//FIXED_FILE is needed by SQPOLL.
-		return 1;
-	}
-
 	int flags = 0;
 #ifdef SQPOLL //Fairly straightforward thanks to the liburing helpers
 	flags |= IORING_SETUP_SQPOLL;
@@ -164,6 +160,12 @@ int echo_io_uring(int fd1, int fd2) {
 
 	if (setup_context(req_size, &ring, flags))
 		return 1;
+
+	int ret = 0;
+	if (ret = io_uring_register_files(&ring, fds, 2)) { //FIXED_FILE is needed by SQPOLL.
+		printf("Error registering file: %s\n", strerror(-ret));
+		return 1;
+	}
 
 	struct iovec iov[req_size];
 	struct msg_sent info[req_size];
