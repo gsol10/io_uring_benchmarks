@@ -83,7 +83,7 @@ static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, st
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
 	io_uring_prep_poll_add(sqe, fd, POLLIN);
-	sqe->flags |= IOSQE_IO_LINK; //Link so that next submission is executed just after this one
+	sqe->flags |= IOSQE_IO_LINK | IOSQE_FIXED_FILE; //Link so that next submission is executed just after this one
 	info[ind].ind = ind;
 	info[ind].op_type = EVENT_POLL;
 	info[ind].interface = interface;
@@ -91,7 +91,7 @@ static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, st
 
 	ind = i + 1;
 	sqe = io_uring_get_sqe(ring);
-	sqe->flags = 0;
+	sqe->flags = IOSQE_FIXED_FILE;
 	iov[ind].iov_len = RECV_BUF_SIZE;
 	io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
 	info[ind].ind = ind;
@@ -104,7 +104,7 @@ static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, s
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
 	io_uring_prep_poll_add(sqe, fd, POLLOUT); //Check when fd is ready to write
-	sqe->flags |= IOSQE_IO_LINK; //Link so that next submission is executed just after this one
+	sqe->flags |= IOSQE_IO_LINK | IOSQE_FIXED_FILE;; //Link so that next submission is executed just after this one
 	info[ind].ind = ind;
 	info[ind].op_type = EVENT_POLL;
 	info[ind].interface = interface;
@@ -112,7 +112,7 @@ static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, s
 
 	ind+=1;
 	sqe = io_uring_get_sqe(ring);
-	sqe->flags = 0;
+	sqe->flags = IOSQE_FIXED_FILE;
 	iov[ind].iov_len = len;
 	io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
 	info[ind].ind = ind;
@@ -124,7 +124,7 @@ static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, s
 static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface) {
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
-	sqe->flags = 0;
+	sqe->flags = IOSQE_FIXED_FILE;
 	iov[ind].iov_len = RECV_BUF_SIZE;
 	io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
 	info[ind].ind = ind;
@@ -136,7 +136,7 @@ static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, st
 static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface, int len) {
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
-	sqe->flags = 0;
+	sqe->flags = IOSQE_FIXED_FILE;
 	iov[ind].iov_len = len;
 	io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
 	info[ind].ind = ind;
@@ -152,6 +152,10 @@ int echo_io_uring(int fd1, int fd2) {
 	int req_size = SQE_SIZE;
 
 	int fds[2] = {fd1, fd2};
+
+	if (io_uring_register_files(&ring, fds, 2)) {//FIXED_FILE is needed by SQPOLL.
+		return 1;
+	}
 
 	int flags = 0;
 #ifdef SQPOLL //Fairly straightforward thanks to the liburing helpers
@@ -201,7 +205,7 @@ int echo_io_uring(int fd1, int fd2) {
 			int32_t interface = 1 - inf->interface; //Opposite interface
 			int ind = inf->ind;
 			int type = inf->op_type;
-			int fd = fds[interface]; //Opposite fd
+			//int fd = fds[interface]; //Opposite fd
 			int ret = cqe->res;
 
 			io_uring_cqe_seen(&ring, cqe);
@@ -213,16 +217,16 @@ int echo_io_uring(int fd1, int fd2) {
 				break;
 			case EVENT_READ:
 #ifndef FEAT_FAST_POLL
-				prepare_write(&ring, info, iov, ind - 1, fd, interface, ret);
+				prepare_write(&ring, info, iov, ind - 1, interface, interface, ret);
 #else
-				prepare_write(&ring, info, iov, ind, fd, interface, ret);
+				prepare_write(&ring, info, iov, ind, interface, interface, ret);
 #endif
 				break;			
 			case EVENT_WRITE:
 #ifndef FEAT_FAST_POLL
-				prepare_read(&ring, info, iov, ind - 1, fd, interface);
+				prepare_read(&ring, info, iov, ind - 1, interface, interface);
 #else
-				prepare_read(&ring, info, iov, ind, fd, interface);
+				prepare_read(&ring, info, iov, ind, interface, interface);
 #endif
 				break;
 			}
