@@ -189,7 +189,7 @@ int echo_io_uring(int fd1, int fd2) {
 #ifndef FEAT_FAST_POLL
 		buffer_index = 2 * i; //Because here, two sq per read
 #endif
-		prepare_read(&ring, info, iov, buffer_index, fd, interface); //TODO: for FEAT_FAST_POLL
+		prepare_read(&ring, info, iov, buffer_index, interface, interface); //TODO: for FEAT_FAST_POLL
 	}
 
 	io_uring_submit(&ring);
