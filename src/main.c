@@ -57,10 +57,22 @@ static int setup_context(unsigned entries, struct io_uring *ring, int flags)
 {
 	int ret;
 
-	ret = io_uring_queue_init(entries, ring, flags);
+	struct io_uring_params p;
+
+	memset(&p, 0, sizeof(p));
+	p.flags = flags;
+
+	ret = io_uring_queue_init_params(entries, ring, &p);
+
 	if (ret < 0) {
 		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
 		return -1;
+	}
+
+	if (p.features & IORING_FEAT_FAST_POLL) {
+		printf("IOURING_FEAT_FAST_POLL is enabled on this kernel\n");
+	} else {
+		printf("IOURING_FEAT_FAST_POLL is not enabled on this kernel\n");
 	}
 
 	return 0;
