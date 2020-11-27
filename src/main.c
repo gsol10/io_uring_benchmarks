@@ -32,14 +32,14 @@
 #endif
 
 int setup_packet(int ifindex) {
-	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, htons(ETH_P_IP));
+	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, htons(ETH_P_ALL));
 
 	struct sockaddr_ll laddr;
 
 	bzero(&laddr, sizeof(struct sockaddr_in));
 
 	laddr.sll_family    = AF_PACKET;
-    laddr.sll_protocol = htons(ETH_P_IP);
+    laddr.sll_protocol = htons(ETH_P_ALL);
     laddr.sll_ifindex =  ifindex;
 
     // Bind the socket with the server address
