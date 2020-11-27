@@ -91,9 +91,9 @@ static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, st
 
 	ind = i + 1;
 	sqe = io_uring_get_sqe(ring);
-	sqe->flags = IOSQE_FIXED_FILE;
 	iov[ind].iov_len = RECV_BUF_SIZE;
 	io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
+	sqe->flags = IOSQE_FIXED_FILE;
 	info[ind].ind = ind;
 	info[ind].op_type = EVENT_READ;
 	info[ind].interface = interface;
@@ -112,9 +112,9 @@ static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, s
 
 	ind+=1;
 	sqe = io_uring_get_sqe(ring);
-	sqe->flags = IOSQE_FIXED_FILE;
 	iov[ind].iov_len = len;
 	io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
+	sqe->flags = IOSQE_FIXED_FILE;
 	info[ind].ind = ind;
 	info[ind].op_type = EVENT_WRITE;
 	info[ind].interface = interface;
@@ -124,9 +124,9 @@ static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, s
 static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface) {
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
-	sqe->flags = IOSQE_FIXED_FILE;
 	iov[ind].iov_len = RECV_BUF_SIZE;
 	io_uring_prep_readv(sqe, fd, &iov[ind], 1, 0);
+	sqe->flags = IOSQE_FIXED_FILE;
 	info[ind].ind = ind;
 	info[ind].op_type = EVENT_READ;
 	info[ind].interface = interface;
@@ -136,9 +136,9 @@ static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, st
 static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface, int len) {
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
-	sqe->flags = IOSQE_FIXED_FILE;
 	iov[ind].iov_len = len;
 	io_uring_prep_writev(sqe, fd, &iov[ind], 1, 0);
+	sqe->flags = IOSQE_FIXED_FILE;
 	info[ind].ind = ind;
 	info[ind].op_type = EVENT_WRITE;
 	info[ind].interface = interface;
