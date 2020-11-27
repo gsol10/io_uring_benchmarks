@@ -20,6 +20,10 @@
 
 #define RECV_BUF_SIZE 2048
 
+#ifndef SQE_SIZE
+#define SQE_SIZE 64
+#endif
+
 //https://stackoverflow.com/a/1941331
 #ifdef DEBUG
 #define DEBUG_PRINT(fmt, args...) printf(fmt, ##args)
@@ -71,7 +75,7 @@ enum {
 struct msg_sent {
 	int op_type;
 	int ind;
-	int interface; //1 or 2 depending on the fd
+	int interface; //0 or 1 depending on the fd
 };
 
 #ifndef FEAT_FAST_POLL //If no FAST_POLL (kernel side polling), need to poll manually by adding a poll operation before the actual read
@@ -145,7 +149,7 @@ static inline int prepare_write(struct io_uring *ring, struct msg_sent *info, st
 
 int echo_io_uring(int fd1, int fd2) {
 	struct io_uring ring;
-	int req_size = 8;
+	int req_size = SQE_SIZE;
 
 	int fds[2] = {fd1, fd2};
 
@@ -166,12 +170,22 @@ int echo_io_uring(int fd1, int fd2) {
 
 	struct io_uring_sqe *sqe;
 
+	#ifndef FEAT_FAST_POLL
+	int init_sqe_nb = req_size / 4; //We fill the SQE up to the half of the SQE (2 sqe, poll and read/write). To be written but we could go up to almost all the way now.
+	#else 
+	int init_sqe_nb = req_size / 2; //Idem but there is only one SQE per read
+	#endif
+
 	//We fill the half of the sqes with read requests for both interfaces
-	for (int32_t i = 0; i < 4; i+=2) {
-		int interface = (i % 4)/2;
+	for (int32_t i = 0; i < init_sqe_nb; i++) {
+		int interface = i%2;
 		int fd = fds[interface];
 
-		prepare_read(&ring, info, iov, i, fd, interface); //TODO: for FEAT_FAST_POLL
+		int buffer_index = i;
+#ifndef FEAT_FAST_POLL
+		buffer_index = 2 * i; //Because here, two sq per read
+#endif
+		prepare_read(&ring, info, iov, buffer_index, fd, interface); //TODO: for FEAT_FAST_POLL
 	}
 
 	io_uring_submit(&ring);
@@ -224,6 +238,8 @@ int main(int argc, char *argv[]) {
 
 	printf("Socket/io_uring test\n\n");
 
+	printf("Compiled with SQE_SIZE = %d\n", SQE_SIZE);
+
 #ifdef SQPOLL
 	printf("Compiled with SQPOLL\n");
 #endif
@@ -231,9 +247,6 @@ int main(int argc, char *argv[]) {
 #ifdef FEAT_FAST_POLL
 	printf("Compiled with FEAT_FAST_POLL\n");
 #endif
-
-	// struct io_uring_params params;
-	// io_uring_setup(32 , &params);
 
 	int n1 = get_ifindex_of_pic(argv[1]);
 	if (n1 == -1) {

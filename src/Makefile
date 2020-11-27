@@ -1,10 +1,9 @@
 LIBURING_PATH=../deps
 
-echo: main.c pci.c
-	gcc main.c pci.c -O2 -I$(LIBURING_PATH)/include -L$(LIBURING_PATH)/lib -luring -o echo
+CFLAGS = -O2 -DSQE_SIZE=64 # -DSQPOLL -DFEAT_FAST_POLL are available
 
-debug:main.c
-	gcc main.c pci.c -g -DDEBUG -I$(LIBURING_PATH)/include -L$(LIBURING_PATH)/lib -luring -o echo
+echo: main.c pci.c
+	gcc $(CFLAGS) main.c pci.c -I$(LIBURING_PATH)/include -L$(LIBURING_PATH)/lib -luring -o echo
 
 clean:
 	rm echo
