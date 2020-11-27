@@ -212,10 +212,18 @@ int echo_io_uring(int fd1, int fd2) {
 			case EVENT_POLL:
 				break;
 			case EVENT_READ:
+#ifndef FEAT_FAST_POLL
 				prepare_write(&ring, info, iov, ind - 1, fd, interface, ret);
+#else
+				prepare_write(&ring, info, iov, ind, fd, interface, ret);
+#endif
 				break;			
 			case EVENT_WRITE:
+#ifndef FEAT_FAST_POLL
 				prepare_read(&ring, info, iov, ind - 1, fd, interface);
+#else
+				prepare_read(&ring, info, iov, ind, fd, interface);
+#endif
 				break;
 			}
 		}
