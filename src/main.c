@@ -79,7 +79,7 @@ struct msg_sent {
 };
 
 #ifndef FEAT_FAST_POLL //If no FAST_POLL (kernel side polling), need to poll manually by adding a poll operation before the actual read
-static inline int prepare_read(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface) {
+static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface) {
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
 	io_uring_prep_poll_add(sqe, fd, POLLIN);
@@ -100,7 +100,7 @@ static inline int prepare_read(struct io_uring *ring, struct msg_sent *info, str
 	io_uring_sqe_set_data(sqe, &info[ind]);
 }
 
-static inline int prepare_write(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface, int len) {
+static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface, int len) {
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
 	io_uring_prep_poll_add(sqe, fd, POLLOUT); //Check when fd is ready to write
@@ -121,7 +121,7 @@ static inline int prepare_write(struct io_uring *ring, struct msg_sent *info, st
 	io_uring_sqe_set_data(sqe, &info[ind]);
 }
 #else
-static inline int prepare_read(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface) {
+static inline void prepare_read(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface) {
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
 	sqe->flags = 0;
@@ -133,7 +133,7 @@ static inline int prepare_read(struct io_uring *ring, struct msg_sent *info, str
 	io_uring_sqe_set_data(sqe, &info[ind]);
 }
 
-static inline int prepare_write(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface, int len) {
+static inline void prepare_write(struct io_uring *ring, struct msg_sent *info, struct iovec *iov, int32_t i, int fd, int interface, int len) {
 	int32_t ind = i;
 	struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
 	sqe->flags = 0;
@@ -167,8 +167,6 @@ int echo_io_uring(int fd1, int fd2) {
 		iov[i].iov_base = malloc(RECV_BUF_SIZE);
 		iov[i].iov_len = RECV_BUF_SIZE;
 	}
-
-	struct io_uring_sqe *sqe;
 
 	#ifndef FEAT_FAST_POLL
 	int init_sqe_nb = req_size / 4; //We fill the SQE up to the half of the SQE (2 sqe, poll and read/write). To be written but we could go up to almost all the way now.

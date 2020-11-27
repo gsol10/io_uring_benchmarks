@@ -73,12 +73,12 @@ int get_ifindex(char *interface_name) {
 char ** get_devices(int *nret) {
     FILE *fp = fopen("/proc/net/dev", "r");
     char * line = NULL;
-    char ifname[20];
+//    char ifname[20];
     size_t len;
     int read;
     char **ifnames = NULL;
-    int nb_names;
-    unsigned long int r_bytes, t_bytes, r_packets, t_packets;
+    int nb_names = 0;
+//    unsigned long int r_bytes, t_bytes, r_packets, t_packets;
 
     // skip first two lines
     getline(&line, &len, fp);
