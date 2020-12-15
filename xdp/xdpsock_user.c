@@ -61,11 +61,15 @@ enum benchmark_type {
 	BENCH_L2FWD = 2,
 };
 
+static char *ifname1;
+static char *ifname2;
+static int ifindex1;
+static int ifindex2;
+static int qid1;
+static int qid2;
+
 static enum benchmark_type opt_bench = BENCH_L2FWD;
 static u32 opt_xdp_flags = XDP_FLAGS_UPDATE_IF_NOEXIST;
-static const char *opt_if = "";
-static int opt_ifindex;
-static int opt_queue;
 static int opt_poll;
 static int opt_interval = 1;
 static u32 opt_xdp_bind_flags = XDP_USE_NEED_WAKEUP;
@@ -119,7 +123,7 @@ static void print_benchmark(bool running)
 	else if (opt_bench == BENCH_L2FWD)
 		bench_str = "l2fwd";
 
-	printf("%s:%d %s ", opt_if, opt_queue, bench_str);
+	printf("%s:%d %s ", ifname1, qid1, bench_str);
 	if (opt_xdp_flags & XDP_FLAGS_SKB_MODE)
 		printf("xdp-skb ");
 	else if (opt_xdp_flags & XDP_FLAGS_DRV_MODE)
@@ -178,16 +182,16 @@ static void *poller(void *arg)
 	return NULL;
 }
 
-static void remove_xdp_program(void)
+static void remove_xdp_program(int ifindex)
 {
 	__u32 curr_prog_id = 0;
 
-	if (bpf_get_link_xdp_id(opt_ifindex, &curr_prog_id, opt_xdp_flags)) {
+	if (bpf_get_link_xdp_id(ifindex, &curr_prog_id, opt_xdp_flags)) {
 		printf("bpf_get_link_xdp_id failed\n");
 		exit(EXIT_FAILURE);
 	}
 	if (prog_id == curr_prog_id)
-		bpf_set_link_xdp_fd(opt_ifindex, -1, opt_xdp_flags);
+		bpf_set_link_xdp_fd(ifindex, -1, opt_xdp_flags);
 	else if (!curr_prog_id)
 		printf("couldn't find a prog id on a given interface\n");
 	else
@@ -203,7 +207,8 @@ static void int_exit(int sig)
 	dump_stats();
 	xsk_socket__delete(xsks[0]->xsk);
 	(void)xsk_umem__delete(umem);
-	remove_xdp_program();
+	remove_xdp_program(ifindex1);
+	remove_xdp_program(ifindex2);
 
 	exit(EXIT_SUCCESS);
 }
@@ -214,18 +219,13 @@ static void __exit_with_error(int error, const char *file, const char *func,
 	fprintf(stderr, "%s:%s:%i: errno: %d/\"%s\"\n", file, func,
 		line, error, strerror(error));
 	dump_stats();
-	remove_xdp_program();
+	remove_xdp_program(ifindex1);
+	remove_xdp_program(ifindex2);
 	exit(EXIT_FAILURE);
 }
 
 #define exit_with_error(error) __exit_with_error(error, __FILE__, __func__, \
 						 __LINE__)
-
-static const char pkt_data[] =
-	"\x3c\xfd\xfe\x9e\x7f\x71\xec\xb1\xd7\x98\x3a\xc0\x08\x00\x45\x00"
-	"\x00\x2e\x00\x00\x00\x00\x40\x11\x88\x97\x05\x08\x07\x08\xc8\x14"
-	"\x1e\x04\x10\x92\x10\x92\x00\x1a\x6d\xa3\x34\x33\x1f\x69\x40\x6b"
-	"\x54\x59\xb6\x14\x2d\x11\x44\xbf\xaf\xd9\xbe\xaa";
 
 static void swap_mac_addresses(void *data)
 {
@@ -274,13 +274,6 @@ static void hex_dump(void *pkt, size_t length, u64 addr)
 	printf("\n");
 }
 
-static size_t gen_eth_frame(struct xsk_umem_info *umem, u64 addr)
-{
-	memcpy(xsk_umem__get_data(umem->buffer, addr), pkt_data,
-	       sizeof(pkt_data) - 1);
-	return sizeof(pkt_data) - 1;
-}
-
 static struct xsk_umem_info *xsk_configure_umem(void *buffer, u64 size)
 {
 	struct xsk_umem_info *umem;
@@ -308,7 +301,7 @@ static struct xsk_umem_info *xsk_configure_umem(void *buffer, u64 size)
 	return umem;
 }
 
-static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem)
+static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, char *ifname, int ifid, int queue_id)
 {
 	struct xsk_socket_config cfg;
 	struct xsk_socket_info *xsk;
@@ -326,12 +319,12 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem)
 	cfg.libbpf_flags = 0;
 	cfg.xdp_flags = opt_xdp_flags;
 	cfg.bind_flags = opt_xdp_bind_flags;
-	ret = xsk_socket__create(&xsk->xsk, opt_if, opt_queue, umem->umem,
+	ret = xsk_socket__create(&xsk->xsk, ifname, queue_id, umem->umem,
 				 &xsk->rx, &xsk->tx, &cfg);
 	if (ret)
 		exit_with_error(-ret);
 
-	ret = bpf_get_link_xdp_id(opt_ifindex, &prog_id, opt_xdp_flags);
+	ret = bpf_get_link_xdp_id(ifid, &prog_id, opt_xdp_flags);
 	if (ret)
 		exit_with_error(-ret);
 
@@ -414,12 +407,12 @@ static void parse_command_line(int argc, char **argv)
 		case 'l':
 			opt_bench = BENCH_L2FWD;
 			break;
-		case 'i':
-			opt_if = optarg;
-			break;
-		case 'q':
-			opt_queue = atoi(optarg);
-			break;
+		// case 'i':
+		// 	opt_if = optarg;
+		// 	break;
+		// case 'q':
+		// 	opt_queue = atoi(optarg);
+		// 	break;
 		case 'p':
 			opt_poll = 1;
 			break;
@@ -459,12 +452,7 @@ static void parse_command_line(int argc, char **argv)
 		}
 	}
 
-	opt_ifindex = if_nametoindex(opt_if);
-	if (!opt_ifindex) {
-		fprintf(stderr, "ERROR: interface \"%s\" does not exist\n",
-			opt_if);
-		usage(basename(argv[0]));
-	}
+
 
 	if ((opt_xsk_frame_size & (opt_xsk_frame_size - 1)) &&
 	    !opt_unaligned_chunks) {
@@ -484,112 +472,95 @@ static void kick_tx(struct xsk_socket_info *xsk)
 	exit_with_error(errno);
 }
 
-static inline void complete_tx_l2fwd(struct xsk_socket_info *xsk,
+static inline void complete_tx_l2fwd(struct xsk_socket_info *xsk_r,
+					 struct xsk_socket_info *xsk_t,
 				     struct pollfd *fds)
 {
-	struct xsk_umem_info *umem = xsk->umem;
+	struct xsk_umem_info *umem_t = xsk_t->umem;
+	struct xsk_umem_info *umem_r = xsk_r->umem;
 	u32 idx_cq = 0, idx_fq = 0;
 	unsigned int rcvd;
 	size_t ndescs;
 
-	if (!xsk->outstanding_tx)
+	if (!xsk_t->outstanding_tx)
 		return;
 
-	if (!opt_need_wakeup || xsk_ring_prod__needs_wakeup(&xsk->tx))
-		kick_tx(xsk);
+	if (!opt_need_wakeup || xsk_ring_prod__needs_wakeup(&xsk_t->tx))
+		kick_tx(xsk_t);
 
-	ndescs = (xsk->outstanding_tx > BATCH_SIZE) ? BATCH_SIZE :
-		xsk->outstanding_tx;
+	ndescs = (xsk_t->outstanding_tx > BATCH_SIZE) ? BATCH_SIZE :
+		xsk_t->outstanding_tx;
 
 	/* re-add completed Tx buffers */
-	rcvd = xsk_ring_cons__peek(&umem->cq, ndescs, &idx_cq);
+	rcvd = xsk_ring_cons__peek(&umem_t->cq, ndescs, &idx_cq);
 	if (rcvd > 0) {
 		unsigned int i;
 		int ret;
 
-		ret = xsk_ring_prod__reserve(&umem->fq, rcvd, &idx_fq);
+		ret = xsk_ring_prod__reserve(&umem_r->fq, rcvd, &idx_fq);
 		while (ret != rcvd) {
 			if (ret < 0)
 				exit_with_error(-ret);
-			if (xsk_ring_prod__needs_wakeup(&umem->fq))
+			if (xsk_ring_prod__needs_wakeup(&umem_r->fq))
 				ret = poll(fds, num_socks, opt_timeout);
-			ret = xsk_ring_prod__reserve(&umem->fq, rcvd, &idx_fq);
+			ret = xsk_ring_prod__reserve(&umem_r->fq, rcvd, &idx_fq);
 		}
 
 		for (i = 0; i < rcvd; i++)
-			*xsk_ring_prod__fill_addr(&umem->fq, idx_fq++) =
-				*xsk_ring_cons__comp_addr(&umem->cq, idx_cq++);
+			*xsk_ring_prod__fill_addr(&umem_r->fq, idx_fq++) =
+				*xsk_ring_cons__comp_addr(&umem_t->cq, idx_cq++);
 
-		xsk_ring_prod__submit(&xsk->umem->fq, rcvd);
-		xsk_ring_cons__release(&xsk->umem->cq, rcvd);
-		xsk->outstanding_tx -= rcvd;
-		xsk->tx_npkts += rcvd;
+		xsk_ring_prod__submit(&xsk_t->umem->fq, rcvd);
+		xsk_ring_cons__release(&xsk_t->umem->cq, rcvd);
+		xsk_t->outstanding_tx -= rcvd;
+		xsk_t->tx_npkts += rcvd;
 	}
 }
 
-static inline void complete_tx_only(struct xsk_socket_info *xsk)
-{
-	unsigned int rcvd;
-	u32 idx;
-
-	if (!xsk->outstanding_tx)
-		return;
-
-	if (!opt_need_wakeup || xsk_ring_prod__needs_wakeup(&xsk->tx))
-		kick_tx(xsk);
-
-	rcvd = xsk_ring_cons__peek(&xsk->umem->cq, BATCH_SIZE, &idx);
-	if (rcvd > 0) {
-		xsk_ring_cons__release(&xsk->umem->cq, rcvd);
-		xsk->outstanding_tx -= rcvd;
-		xsk->tx_npkts += rcvd;
-	}
-}
-
-static void l2fwd(struct xsk_socket_info *xsk, struct pollfd *fds)
+static void l2fwd(struct xsk_socket_info *xsk_r, struct xsk_socket_info *xsk_t, struct pollfd *fds)
 {
 	unsigned int rcvd, i;
 	u32 idx_rx = 0, idx_tx = 0;
 	int ret;
 
-	complete_tx_l2fwd(xsk, fds);
+	complete_tx_l2fwd(xsk_r, xsk_t, fds);
 
-	rcvd = xsk_ring_cons__peek(&xsk->rx, BATCH_SIZE, &idx_rx);
+	rcvd = xsk_ring_cons__peek(&xsk_r->rx, BATCH_SIZE, &idx_rx);
 	if (!rcvd) {
-		if (xsk_ring_prod__needs_wakeup(&xsk->umem->fq))
+		if (xsk_ring_prod__needs_wakeup(&xsk_r->umem->fq))
 			ret = poll(fds, num_socks, opt_timeout);
 		return;
 	}
 
-	ret = xsk_ring_prod__reserve(&xsk->tx, rcvd, &idx_tx);
+	ret = xsk_ring_prod__reserve(&xsk_t->tx, rcvd, &idx_tx);
 	while (ret != rcvd) {
 		if (ret < 0)
 			exit_with_error(-ret);
-		if (xsk_ring_prod__needs_wakeup(&xsk->tx))
-			kick_tx(xsk);
-		ret = xsk_ring_prod__reserve(&xsk->tx, rcvd, &idx_tx);
+		if (xsk_ring_prod__needs_wakeup(&xsk_t->tx))
+			kick_tx(xsk_t);
+		ret = xsk_ring_prod__reserve(&xsk_t->tx, rcvd, &idx_tx);
 	}
 
 	for (i = 0; i < rcvd; i++) {
-		u64 addr = xsk_ring_cons__rx_desc(&xsk->rx, idx_rx)->addr;
-		u32 len = xsk_ring_cons__rx_desc(&xsk->rx, idx_rx++)->len;
+		u64 addr = xsk_ring_cons__rx_desc(&xsk_r->rx, idx_rx)->addr;
+		u32 len = xsk_ring_cons__rx_desc(&xsk_r->rx, idx_rx++)->len;
 		u64 orig = addr;
 
 		addr = xsk_umem__add_offset_to_addr(addr);
-		char *pkt = xsk_umem__get_data(xsk->umem->buffer, addr);
+		char *pkt = xsk_umem__get_data(xsk_r->umem->buffer, addr);
 
 		swap_mac_addresses(pkt);
 
 		hex_dump(pkt, len, addr);
-		xsk_ring_prod__tx_desc(&xsk->tx, idx_tx)->addr = orig;
-		xsk_ring_prod__tx_desc(&xsk->tx, idx_tx++)->len = len;
+		xsk_ring_prod__tx_desc(&xsk_t->tx, idx_tx)->addr = orig;
+		xsk_ring_prod__tx_desc(&xsk_t->tx, idx_tx++)->len = len;
 	}
 
-	xsk_ring_prod__submit(&xsk->tx, rcvd);
-	xsk_ring_cons__release(&xsk->rx, rcvd);
+	xsk_ring_prod__submit(&xsk_t->tx, rcvd);
+	xsk_ring_cons__release(&xsk_r->rx, rcvd);
 
-	xsk->rx_npkts += rcvd;
-	xsk->outstanding_tx += rcvd;
+	xsk_r->rx_npkts += rcvd;
+	xsk_t->outstanding_tx += rcvd;
 }
 
 static void l2fwd_all(void)
@@ -612,7 +583,7 @@ static void l2fwd_all(void)
 		}
 
 		for (i = 0; i < num_socks; i++)
-			l2fwd(xsks[i], fds);
+			l2fwd(xsks[i], xsks[1 - i], fds);
 	}
 }
 
@@ -626,6 +597,24 @@ int main(int argc, char **argv)
 
 	parse_command_line(argc, argv);
 
+	ifname1 = "lo";
+	ifindex1 = if_nametoindex(ifname1);
+	qid1 = 8;
+	if (!ifindex1) {
+		fprintf(stderr, "ERROR: interface \"%s\" does not exist\n",
+			ifname1);
+		usage(basename(argv[0]));
+	}
+
+	ifname2 = "lo";
+	ifindex2 = if_nametoindex(ifname2);
+	qid2 = 8;
+	if (!ifindex2) {
+		fprintf(stderr, "ERROR: interface \"%s\" does not exist\n",
+			ifname2);
+		usage(basename(argv[0]));
+	}
+
 	if (setrlimit(RLIMIT_MEMLOCK, &r)) {
 		fprintf(stderr, "ERROR: setrlimit(RLIMIT_MEMLOCK) \"%s\"\n",
 			strerror(errno));
@@ -636,17 +625,17 @@ int main(int argc, char **argv)
 	bufs = mmap(NULL, NUM_FRAMES * opt_xsk_frame_size,
 		    PROT_READ | PROT_WRITE,
 		    MAP_PRIVATE | MAP_ANONYMOUS | opt_mmap_flags, -1, 0);
-	if (bufs1 == MAP_FAILED) {
+	if (bufs == MAP_FAILED) {
 		printf("ERROR: mmap failed\n");
 		exit(EXIT_FAILURE);
 	}
 
        /* Create sockets... */
 	umem_1 = xsk_configure_umem(bufs, NUM_FRAMES * opt_xsk_frame_size);
-	xsks[num_socks++] = xsk_configure_socket(umem_1); //TODO: some work so that first half is for device 1 receive, device 2 receives in 2nd half
+	xsks[num_socks++] = xsk_configure_socket(umem_1, ifname1, ifindex1, qid1); //TODO: some work so that first half is for device 1 receive, device 2 receives in 2nd half
 
 	umem_2 = xsk_configure_umem(bufs, NUM_FRAMES * opt_xsk_frame_size); //So this is a hack to use a shared Umem between != devices and qid (cf. https://lore.kernel.org/netdev/1595236694-12749-1-git-send-email-magnus.karlsson@intel.com/, it is fixed in Linux 5.8)
-	xsks[num_socks++] = xsk_configure_socket(umem_2);
+	xsks[num_socks++] = xsk_configure_socket(umem_2, ifname2, ifindex2, qid2);
 
 	signal(SIGINT, int_exit);
 	signal(SIGTERM, int_exit);
