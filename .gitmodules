@@ -5,3 +5,6 @@
 	path = benchmarking/moongen
 	url = https://github.com/emmericp/MoonGen
 	ignore = dirty
+[submodule "libbpf"]
+	path = libbpf
+	url = https://github.com/libbpf/libbpf
