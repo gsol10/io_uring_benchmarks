@@ -301,13 +301,14 @@ static struct xsk_umem_info *xsk_configure_umem(void *buffer, u64 size)
 	return umem;
 }
 
-static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, char *ifname, int ifid, int queue_id)
+static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, char *ifname, int ifid, int queue_id, bool first)
 {
 	struct xsk_socket_config cfg;
 	struct xsk_socket_info *xsk;
 	int ret;
 	u32 idx;
 	int i;
+	u32 offset = first ? 0 : XSK_RING_PROD__DEFAULT_NUM_DESCS;
 
 	xsk = calloc(1, sizeof(*xsk));
 	if (!xsk)
@@ -335,7 +336,7 @@ static struct xsk_socket_info *xsk_configure_socket(struct xsk_umem_info *umem, 
 		exit_with_error(-ret);
 	for (i = 0; i < XSK_RING_PROD__DEFAULT_NUM_DESCS; i++)
 		*xsk_ring_prod__fill_addr(&xsk->umem->fq, idx++) =
-			i * opt_xsk_frame_size;
+			(i + offset) * opt_xsk_frame_size;
 	xsk_ring_prod__submit(&xsk->umem->fq,
 			      XSK_RING_PROD__DEFAULT_NUM_DESCS);
 
@@ -632,10 +633,10 @@ int main(int argc, char **argv)
 
        /* Create sockets... */
 	umem_1 = xsk_configure_umem(bufs, NUM_FRAMES * opt_xsk_frame_size);
-	xsks[num_socks++] = xsk_configure_socket(umem_1, ifname1, ifindex1, qid1); //TODO: some work so that first half is for device 1 receive, device 2 receives in 2nd half
+	xsks[num_socks++] = xsk_configure_socket(umem_1, ifname1, ifindex1, qid1, 1); //TODO: some work so that first half is for device 1 receive, device 2 receives in 2nd half
 
 	umem_2 = xsk_configure_umem(bufs, NUM_FRAMES * opt_xsk_frame_size); //So this is a hack to use a shared Umem between != devices and qid (cf. https://lore.kernel.org/netdev/1595236694-12749-1-git-send-email-magnus.karlsson@intel.com/, it is fixed in Linux 5.8)
-	xsks[num_socks++] = xsk_configure_socket(umem_2, ifname2, ifindex2, qid2);
+	xsks[num_socks++] = xsk_configure_socket(umem_2, ifname2, ifindex2, qid2, 0);
 
 	signal(SIGINT, int_exit);
 	signal(SIGTERM, int_exit);
