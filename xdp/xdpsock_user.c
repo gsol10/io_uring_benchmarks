@@ -278,7 +278,7 @@ static struct xsk_umem_info *xsk_configure_umem(void *buffer, u64 size)
 {
 	struct xsk_umem_info *umem;
 	struct xsk_umem_config cfg = {
-		.fill_size = XSK_RING_PROD__DEFAULT_NUM_DESCS,
+		.fill_size = XSK_RING_PROD__DEFAULT_NUM_DESCS * 2, //This is needed because the fq can be update after the rx thus causing a deadlock
 		.comp_size = XSK_RING_CONS__DEFAULT_NUM_DESCS,
 		.frame_size = opt_xsk_frame_size,
 		.frame_headroom = XSK_UMEM__DEFAULT_FRAME_HEADROOM,
@@ -525,6 +525,7 @@ static void l2fwd(struct xsk_socket_info *xsk_r, struct xsk_socket_info *xsk_t, 
 	int ret;
 
 	complete_tx_l2fwd(xsk_r, xsk_t, fds);
+	complete_tx_l2fwd(xsk_t, xsk_r, fds);
 
 	rcvd = xsk_ring_cons__peek(&xsk_r->rx, BATCH_SIZE, &idx_rx);
 	if (!rcvd) {
