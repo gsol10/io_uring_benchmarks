@@ -511,7 +511,7 @@ static inline void complete_tx_l2fwd(struct xsk_socket_info *xsk_r,
 			*xsk_ring_prod__fill_addr(&umem_r->fq, idx_fq++) =
 				*xsk_ring_cons__comp_addr(&umem_t->cq, idx_cq++);
 
-		xsk_ring_prod__submit(&xsk_t->umem->fq, rcvd);
+		xsk_ring_prod__submit(&xsk_r->umem->fq, rcvd);
 		xsk_ring_cons__release(&xsk_t->umem->cq, rcvd);
 		xsk_t->outstanding_tx -= rcvd;
 		xsk_t->tx_npkts += rcvd;
