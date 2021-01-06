@@ -17,13 +17,13 @@ It appears that the performance is not specially impressive, but this is mostly 
 
 ## Setup
 
-1. Set up liburing
+1. For iouring example (in ./src) Set up liburing
     1. `git submodule init`
     2. `git submodule update`
     3. `./configure` to `deps` folder
     4. `make install`
 
-2.b. For xdp example, set up libbpf
+1. For xdp example (in ./xdp), set up libbpf
     1. `cd libbpf/src`
     2. `make`
     3. `mkdir ../deps/include/bpf && cp *.h ../deps/include/bpf`
