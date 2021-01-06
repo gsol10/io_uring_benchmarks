@@ -268,7 +268,7 @@ int main(int argc, char *argv[]) {
 	printf("Compiled with SQPOLL\n");
 #endif
 
-#ifdef FEAT_FAST_POLL
+#ifdef FEAT_FAST_POLL //This is wrong. FEAT_FAST_POLL does not depend on us, it's a kernel feature. Here the easiest is to compile with FEAT_FAST_POLL if your kernel is >=5.7. It's an easy fix but I have no use for it.
 	printf("Compiled with FEAT_FAST_POLL\n");
 #endif
 
